@@ -1,33 +1,34 @@
 #!/bin/bash
-#check if sudo
-if [ "$EUID" -ne 0 ] ; then
-  echo "Sorry, but you are not root. Use sudo to run"
-  exit 1
+if [ "$EUID" -ne 0 ]; then
+    echo "Please run as root: sudo ./install.sh"
+    exit 1
 fi
 
-read -p "Which flavour do you want? 1) QT5 2) GTK3 :" sel
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
-#copy desktop to /usr/share applications
-sudo mkdir -p /usr/local/bin/MediaInfoGui;
-if [ "$sel" = "1" ]
-then
-	sudo cp MediaInfoGuiQt.desktop /usr/share/applications/MediaInfoGui.desktop
-        echo "copying QT"
-        prompt="#    *pyqt5 or python3-pyqt5                       #"
-elif [ "$sel" = "2" ]
-then
-	sudo cp MediaInfoGuiGTK3.desktop /usr/share/applications/MediaInfoGui.desktop
-        prompt="#    *python-gobject                               #"
-        echo "copying GTK3"
+read -p "Which flavour do you want? 1) Qt6  2) GTK3  3) GTK4 : " sel
+
+if [ "$sel" = "1" ]; then
+    cp "$DIR"/MediaInfoGuiQt.desktop   /usr/share/applications/MediaInfoGui.desktop
+    prompt="python3-pyqt6 (PyQt6)"
+elif [ "$sel" = "2" ]; then
+    cp "$DIR"/MediaInfoGuiGTK3.desktop /usr/share/applications/MediaInfoGui.desktop
+    prompt="python3-gi with GTK3"
+elif [ "$sel" = "3" ]; then
+    cp "$DIR"/MediaInfoGuiGTK4.desktop /usr/share/applications/MediaInfoGui.desktop
+    prompt="python3-gi with GTK4"
 else
-   echo "Invalid choice. Aborting"
-   exit 1
-fi		
-sudo cp * /usr/local/bin/MediaInfoGui/;
+    echo "Invalid choice. Aborting."
+    exit 1
+fi
 
-echo "####################################################"
-echo "#   Ensure you have installed:                     #"                     
-echo "$prompt"
-echo "#    *mediainfo                                    #"
-echo "####################################################"
-echo "App installed."
+install -d /opt/mediainfogui
+cp "$DIR"/*.py  /opt/mediainfogui/
+cp "$DIR"/*.png /opt/mediainfogui/
+chmod 755 /opt/mediainfogui/MediaInfoGui.py
+
+ln -sf /opt/mediainfogui/MediaInfoGui.py /usr/bin/mediainfogui
+
+echo "MediaInfoGui installed."
+echo "Required packages: mediainfo ${prompt}"
+echo "Optional: ffprobe (from ffmpeg) for MPEG-TS program info"

@@ -1,0 +1,177 @@
+import org.apache.tools.ant.filters.ReplaceTokens
+import java.security.MessageDigest
+
+def version    = gradle.ext.version
+def pkgrelease = gradle.ext.pkgrelease
+def libs       = gradle.ext.libs
+def optLibs    = gradle.ext.optLibs
+def outDir     = file("dist")
+
+def tok(Map m) { m.collectEntries { k, v -> [k.toString(), v.toString()] } }
+
+def computeMD5(File f) {
+    def md = MessageDigest.getInstance("MD5")
+    f.eachByte(65536) { bytes, len -> md.update(bytes, 0, len) }
+    md.digest().encodeHex().toString()
+}
+
+// "pkg-a, pkg-b: desc" → "'pkg-a' 'pkg-b: desc'"  (PKGBUILD array format)
+def archPkgFmt(String s) { s.split(',').collect { "'${it.trim()}'" }.join(' ') }
+
+def makeSrcInfo(String pkgver, String pkgrel, String md5, String deps, String optDeps) {
+    def depLines    = deps.split(',').collect    { "\tdepends = ${it.trim()}" }.join("\n")
+    def optDepLines = optDeps.split(',').collect { "\toptdepends = ${it.trim()}" }.join("\n")
+"""\
+pkgbase = mediainfogui
+\tpkgdesc = GUI for MediaInfo data — Qt6, GTK3 and GTK4
+\tpkgver = ${pkgver}
+\tpkgrel = ${pkgrel}
+\turl = https://github.com/kanehekili/MediaInfoGui
+\tarch = x86_64
+\tarch = aarch64
+\tlicense = GPL-2.0-or-later
+${depLines}
+${optDepLines}
+\tsource = https://github.com/kanehekili/MediaInfoGui/releases/download/${pkgver}/MediaInfoGui${pkgver}.tar
+\tmd5sums = ${md5}
+
+pkgname = mediainfogui
+"""
+}
+
+// ── Install tarball (replaces build/build.xml "deploy" target) ────────────────
+
+tasks.register("build_tar") {
+    description = "Stage and tar dist/MediaInfoGui${version}.tar for install.sh use"
+    group       = "packaging"
+
+    doLast {
+        def stageDir = file("${outDir}/stage/MediaInfoGui")
+        stageDir.mkdirs()
+
+        // Desktop files and install scripts
+        copy {
+            from("build") { include "*.desktop", "*install*.sh" }
+            into(stageDir)
+        }
+        ant.chmod(file: "${stageDir}/install.sh",   perm: "ug+rwx")
+        ant.chmod(file: "${stageDir}/uninstall.sh", perm: "ug+rwx")
+
+        // MediaInfoGui.py with version token substituted
+        copy {
+            from("src") { include "MediaInfoGui.py" }
+            into(stageDir)
+            filter(ReplaceTokens, tokens: tok([xxxx: version]))
+        }
+
+        // Widget modules and assets (no token substitution needed)
+        copy {
+            from("src") { include "MediaInfoWidgets*.py", "*.png" }
+            into(stageDir)
+        }
+
+        // Create the tarball
+        def tarFile = file("${outDir}/MediaInfoGui${version}.tar")
+        ant.tar(destfile: tarFile, basedir: "${outDir}/stage", includes: "MediaInfoGui/**")
+
+        delete file("${outDir}/stage")
+        println "  Install tarball: ${tarFile}"
+    }
+}
+
+// ── PyPI ──────────────────────────────────────────────────────────────────────
+
+tasks.register("build_pypi") {
+    description = "Stage dist/pypi/ ready for 'python -m build'"
+    group       = "packaging"
+
+    doLast {
+        def pypiOut = file("${outDir}/pypi")
+        def pkgDir  = file("${pypiOut}/mediainfogui")
+        pkgDir.mkdirs()
+
+        // Copy sources with @xxxx@ → version substitution
+        copy {
+            from("src") { include "*.py" }
+            into(pkgDir)
+            filter(ReplaceTokens, tokens: tok([xxxx: version]))
+        }
+
+        // Patch absolute imports → relative for installed-package context
+        ["MediaInfoGui.py",
+         "MediaInfoWidgetsQt.py",
+         "MediaInfoWidgetsGTK3.py",
+         "MediaInfoWidgetsGTK4.py"].each { name ->
+            def f = file("${pkgDir}/${name}")
+            def text = f.text
+            text = text.replace("import MediaInfoWidgetsQt",   "from . import MediaInfoWidgetsQt")
+            text = text.replace("import MediaInfoWidgetsGTK3", "from . import MediaInfoWidgetsGTK3")
+            text = text.replace("import MediaInfoWidgetsGTK4", "from . import MediaInfoWidgetsGTK4")
+            text = text.replace("from MediaInfoGui import",    "from .MediaInfoGui import")
+            f.text = text
+        }
+
+        file("${pkgDir}/__init__.py").text = ""
+
+        copy { from "src/mediainfo.png" into pkgDir }
+
+        copy {
+            from "build/pypi-template"
+            into pypiOut
+            filter(ReplaceTokens, tokens: tok([xxx: version]))
+        }
+
+        copy { from "README.md" into pypiOut }
+
+        println "  PyPI stage ready: ${pypiOut}"
+        println "  Run:  cd ${pypiOut} && python -m build"
+    }
+}
+
+// ── AUR ───────────────────────────────────────────────────────────────────────
+
+tasks.register("build_aur") {
+    description = "Generate dist/AUR/PKGBUILD and .SRCINFO"
+    group       = "packaging"
+    dependsOn   "build_tar"
+
+    doLast {
+        def aurOut  = file("${outDir}/AUR")
+        def tarFile = file("${outDir}/MediaInfoGui${version}.tar")
+        aurOut.mkdirs()
+
+        def md5 = computeMD5(tarFile)
+        println "  AUR source tarball: ${tarFile.name}  md5=${md5}"
+
+        copy {
+            from "build/AUR-template/PKGBUILD"
+            into aurOut
+            filter(ReplaceTokens, tokens: tok([
+                xxx      : version,
+                xpkgrelx : pkgrelease,
+                md5sum   : md5,
+                xlibsx   : archPkgFmt(libs),
+                xoptlibsx: archPkgFmt(optLibs),
+            ]))
+        }
+
+        file("${aurOut}/.SRCINFO").text = makeSrcInfo(version, pkgrelease, md5, libs, optLibs)
+        println "  .SRCINFO generated"
+    }
+}
+
+// ── aggregate / clean ─────────────────────────────────────────────────────────
+
+tasks.register("build_all") {
+    description = "Build install tarball, AUR package and PyPI package"
+    group       = "packaging"
+    dependsOn "build_tar", "build_aur", "build_pypi"
+}
+
+tasks.register("clean") {
+    description = "Delete the dist/ output directory"
+    group       = "build"
+    doLast { delete outDir }
+}
+
+defaultTasks "build_all"

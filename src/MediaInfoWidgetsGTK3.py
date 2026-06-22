@@ -3,12 +3,13 @@ Created on Nov 18, 2011
 
 @author: kanehekili
 '''
-import sys,re
+import sys
 import os
 import gi
 import locale
 gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Gdk,GLib,Pango
+from MediaInfoGui import isHeader, formatForClipboard
 
 class MediaInfoView:
     
@@ -48,18 +49,24 @@ class MediaInfoView:
             Gtk.AttachOptions.FILL | Gtk.AttachOptions.EXPAND, 1, 1)
 
         
-        #create the ok button that closes all
-        dummy = Gtk.Label()
-        buttonOK = Gtk.Button(label="egal",stock=Gtk.STOCK_OK)
-        buttonOK.set_size_request(100, 40)
-        buttonOK.connect("clicked",self.callback_btn_ok,"OK button")
-        layoutTable.attach(buttonOK,1,2,1,2,Gtk.AttachOptions.SHRINK, Gtk.AttachOptions.FILL)
-        
-        layoutTable.attach(dummy,0,1,1,2,Gtk.AttachOptions.EXPAND, Gtk.AttachOptions.FILL)
+        #create the button bar
+        btnBar = Gtk.HBox(homogeneous=False, spacing=0)
+        buttonCopy = Gtk.Button(label="Clip")
+        buttonCopy.connect("clicked", self.callback_copy)
+        buttonOK = Gtk.Button(label="egal", stock=Gtk.STOCK_OK)
+        buttonOK.connect("clicked", self.callback_btn_ok, "OK button")
+        btnBar.pack_start(buttonCopy, False, False, 0)
+        btnBar.pack_end(buttonOK, False, False, 0)
+        layoutTable.attach(btnBar, 0, 2, 1, 2,
+            Gtk.AttachOptions.FILL | Gtk.AttachOptions.EXPAND,
+            Gtk.AttachOptions.FILL, 1, 1)
         #layoutTable.set_row_spacing(row=0,spacing=5)
         self.window.add(layoutTable)
        
         self.window.show_all()
+        sc = self.treeView.get_style_context()
+        self.header_bg_rgba = sc.get_background_color(Gtk.StateFlags.SELECTED)
+        self.header_fg_rgba = sc.get_color(Gtk.StateFlags.SELECTED)
     
     ##create a text view 
     def createTextWidget(self):
@@ -84,21 +91,28 @@ class MediaInfoView:
         self.store = Gtk.ListStore(str,str)
         return self.store
     
+    def _headerCellData(self, column, renderer, model, iter, col_idx):
+        is_header = isHeader((model.get_value(iter, 0), model.get_value(iter, 1)))
+        if is_header:
+            renderer.set_property('cell-background-rgba', self.header_bg_rgba)
+            renderer.set_property('cell-background-set', True)
+            renderer.set_property('foreground-rgba', self.header_fg_rgba)
+            renderer.set_property('foreground-set', True)
+            renderer.set_property('weight', 700)
+        else:
+            renderer.set_property('cell-background-set', False)
+            renderer.set_property('foreground-set', False)
+            renderer.set_property('weight', 400)
+
     def createColumn(self,columnContainer,headerString,columnID):
         rendererText = Gtk.CellRendererText()
         column = Gtk.TreeViewColumn(headerString, rendererText, text=columnID)
-        #column.set_sort_column_id(columnID)    
+        column.set_cell_data_func(rendererText, self._headerCellData, columnID)
         columnContainer.append_column(column)
  
-    def fillTable(self,mediaInfoList):
-        for line in mediaInfoList:
-            row = line.decode("utf-8")
-            token=re.split('[ ]+:[ ]+',row)
-            if len(token) == 1:
-                data=(token[0],"")
-            else:
-                data=(token[0],token[1])     
-            self.addTextLine(data)
+    def fillTable(self, rows):
+        for row in rows:
+            self.addTextLine(row)
 
     #adds an array of strings. For the media view we need the Item name and value        
     def addTextLine(self, strings):
@@ -111,8 +125,11 @@ class MediaInfoView:
     
     
     #  ------------ Callback section -----------------
-    # The data passed to this method is printed to stdout
-  
+    def callback_copy(self, widget, data=None):
+        clipboard = Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD)
+        clipboard.set_text(formatForClipboard([(r[0], r[1]) for r in self.store]), -1)
+        clipboard.store()
+
     def callback_btn_ok(self, widget, data=None):
         Gtk.main_quit();
     

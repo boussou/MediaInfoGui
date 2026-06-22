@@ -1,0 +1,25 @@
+# Maintainer: Kanehekili <kanehekili.media@gmail.com>
+pkgname=mediainfogui
+pkgver=@xxx@
+pkgrel=@xpkgrelx@
+pkgdesc="GUI for MediaInfo data — Qt6, GTK3 and GTK4"
+url="https://github.com/kanehekili/MediaInfoGui"
+license=('GPL-2.0-or-later')
+depends=(@xlibsx@)
+optdepends=(@xoptlibsx@)
+arch=('x86_64' 'aarch64')
+source=(https://github.com/kanehekili/MediaInfoGui/releases/download/@xxx@/MediaInfoGui@xxx@.tar)
+md5sums=(@md5sum@)
+
+package() {
+  cd "${srcdir}/MediaInfoGui"
+
+  install -Dm 644 *.py            -t "${pkgdir}/opt/mediainfogui"
+  install -Dm 755 MediaInfoGui.py -t "${pkgdir}/opt/mediainfogui"
+  install -Dm 644 *.png           -t "${pkgdir}/opt/mediainfogui"
+
+  install -Dm 644 *.desktop -t "${pkgdir}/usr/share/applications"
+
+  install -d "${pkgdir}/usr/bin"
+  ln -s "/opt/mediainfogui/MediaInfoGui.py" "${pkgdir}/usr/bin/mediainfogui"
+}

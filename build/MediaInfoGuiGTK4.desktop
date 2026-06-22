@@ -3,8 +3,8 @@
 Encoding=UTF-8
 Version=1.0
 Type=Application
-Exec=python3 /opt/mediainfogui/MediaInfoGui.py gtk3 %f
-Name=Media Info GTK3
+Exec=python3 /opt/mediainfogui/MediaInfoGui.py gtk4 %f
+Name=Media Info GTK4
 Comment=Shows media info data
 Icon=/opt/mediainfogui/mediainfo.png
 NoDisplay=false
