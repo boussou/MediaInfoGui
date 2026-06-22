@@ -1,0 +1,12 @@
+post_install() {
+    echo ""
+    echo "MediaInfoGui requires at least one UI toolkit to run:"
+    echo "  Qt6  (default):  sudo pacman -S python-pyqt6"
+    echo "  GTK3/GTK4:       sudo pacman -S python-gobject"
+    echo "  MPEG-TS info:    sudo pacman -S ffmpeg  (optional)"
+    echo ""
+}
+
+post_upgrade() {
+    post_install
+}

@@ -144,6 +144,11 @@ tasks.register("build_aur") {
         println "  AUR source tarball: ${tarFile.name}  md5=${md5}"
 
         copy {
+            from "build/AUR-template/mediainfogui.install"
+            into aurOut
+        }
+
+        copy {
             from "build/AUR-template/PKGBUILD"
             into aurOut
             filter(ReplaceTokens, tokens: tok([
