@@ -107,23 +107,6 @@ class MediaInfoView(Gtk.ApplicationWindow):
         self.get_application().quit()
 
 
-def showMessage(messageString):
-    app = Gtk.Application()
-
-    def on_activate(application):
-        dialog = Gtk.MessageDialog(
-            transient_for=None,
-            message_type=Gtk.MessageType.ERROR,
-            buttons=Gtk.ButtonsType.CLOSE,
-            text=messageString
-        )
-        dialog.connect("response", lambda d, r: application.quit())
-        dialog.present()
-
-    app.connect("activate", on_activate)
-    app.run(None)
-
-
 def main(argv=None):
     app = Gtk.Application()
 

@@ -1,0 +1,14 @@
+Source: mediainfogui
+Maintainer: Kanehekili <kanehekili.media@gmail.com>
+Section: video
+Priority: optional
+Build-Depends: debhelper
+Standards-Version: 3.0.0
+
+Package: mediainfogui
+Architecture: amd64 arm64 armhf
+Depends: @xlibsx@, ${shlibs:Depends}, ${misc:Depends}
+Suggests: @xsuggestsx@
+Description: GUI for MediaInfo data - Qt6, GTK3 and GTK4
+Section: video
+Priority: optional

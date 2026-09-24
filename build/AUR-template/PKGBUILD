@@ -19,7 +19,9 @@ package() {
   install -Dm 755 MediaInfoGui.py -t "${pkgdir}/opt/mediainfogui"
   install -Dm 644 *.png           -t "${pkgdir}/opt/mediainfogui"
 
-  install -Dm 644 *.desktop -t "${pkgdir}/usr/share/applications"
+  # only the toolkit-neutral entry reaches the menu - the app detects the UI.
+  # The MediaInfoGui*.desktop variants are shipped in the tar for install.sh
+  install -Dm 644 MediaInfoGui.desktop -t "${pkgdir}/usr/share/applications"
 
   install -d "${pkgdir}/usr/bin"
   ln -s "/opt/mediainfogui/MediaInfoGui.py" "${pkgdir}/usr/bin/mediainfogui"

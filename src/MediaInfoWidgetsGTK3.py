@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 '''
 Created on Nov 18, 2011
 
@@ -138,24 +139,6 @@ class MediaInfoView:
         Gtk.main_quit()
         return False    
    
-
-def showMessage(messageString):
-    message = Gtk.MessageDialog(None,
-                             Gtk.DialogFlags.MODAL,
-                             Gtk.MessageType.INFO,
-                             Gtk.ButtonsType.NONE,
-                             messageString)
-    message.add_button(Gtk.STOCK_QUIT, Gtk.ResponseType.CLOSE)
-    resp = message.run()
-    closewidget(message)
-
-#hook to ensure closing widget
-def closewidget(widget):
-    widget.destroy()
-    while Gtk.events_pending():
-        Gtk.main_iteration()
-     
-         
 
 def main(argv = None):
     if argv is None:

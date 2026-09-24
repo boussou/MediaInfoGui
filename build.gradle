@@ -1,13 +1,41 @@
 import org.apache.tools.ant.filters.ReplaceTokens
 import java.security.MessageDigest
+import java.time.ZoneOffset
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 
 def version    = gradle.ext.version
 def pkgrelease = gradle.ext.pkgrelease
-def libs       = gradle.ext.libs
-def optLibs    = gradle.ext.optLibs
+def distros    = gradle.ext.distros
 def outDir     = file("dist")
 
 def tok(Map m) { m.collectEntries { k, v -> [k.toString(), v.toString()] } }
+
+def stageDir = { String sub -> file("${outDir}/stage/${sub}") }
+
+// MediaInfoGui.py carries the @xxxx@ version token, the rest is copied as-is
+def stageSources = { File dst ->
+    copy {
+        from("src") { include "MediaInfoGui.py" }
+        into(dst)
+        filter(ReplaceTokens, tokens: tok([xxxx: version]))
+    }
+    copy {
+        from("src") { include "MediaInfoWidgets*.py", "*.png" }
+        into(dst)
+    }
+}
+
+// Create an uncompressed tar; arcName becomes the single root directory inside.
+// ant.tar ignores on-disk permissions and stamps 644 - install scripts and
+// debian/rules must be executable, so they get their own fileset.
+def makeTar = { File tarFile, String arcName, File sourceDir ->
+    def execFiles = "${arcName}/*.sh,${arcName}/debian/rules"
+    ant.tar(destfile: tarFile) {
+        tarfileset(dir: sourceDir.parent, includes: "${arcName}/**", excludes: execFiles)
+        tarfileset(dir: sourceDir.parent, includes: execFiles, filemode: "755")
+    }
+}
 
 def computeMD5(File f) {
     def md = MessageDigest.getInstance("MD5")
@@ -46,44 +74,49 @@ tasks.register("build_tar") {
     group       = "packaging"
 
     doLast {
-        def stageDir = file("${outDir}/stage/MediaInfoGui")
-        stageDir.mkdirs()
+        def stage = stageDir("MediaInfoGui")
+        stage.mkdirs()
 
-        // Desktop files and install scripts
+        // Desktop files (one per toolkit) and install scripts
         copy {
             from("build") { include "*.desktop", "*install*.sh" }
-            into(stageDir)
-        }
-        ant.chmod(file: "${stageDir}/install.sh",   perm: "ug+rwx")
-        ant.chmod(file: "${stageDir}/uninstall.sh", perm: "ug+rwx")
-
-        // MediaInfoGui.py with version token substituted
-        copy {
-            from("src") { include "MediaInfoGui.py" }
-            into(stageDir)
-            filter(ReplaceTokens, tokens: tok([xxxx: version]))
+            into(stage)
         }
 
-        // Widget modules and assets (no token substitution needed)
-        copy {
-            from("src") { include "MediaInfoWidgets*.py", "*.png" }
-            into(stageDir)
-        }
+        stageSources(stage)
 
-        // Create the tarball
         def tarFile = file("${outDir}/MediaInfoGui${version}.tar")
-        ant.tar(destfile: tarFile, basedir: "${outDir}/stage", includes: "MediaInfoGui/**")
+        makeTar(tarFile, "MediaInfoGui", stage)
 
         delete file("${outDir}/stage")
         println "  Install tarball: ${tarFile}"
     }
 }
 
-// ── PyPI ──────────────────────────────────────────────────────────────────────
+// ── README version sync ───────────────────────────────────────────────────────
 
+tasks.register("update_readme") {
+    description = "Rewrite version references in README.md to match settings.gradle"
+    group       = "packaging"
+    doLast {
+        def readme = file("README.md")
+        def text   = readme.text
+        text = text.replaceAll(/Version \d+\.\d+\.\d+/, "Version ${version}")
+        text = text.replaceAll(
+            /https:\/\/github\.com\/kanehekili\/MediaInfoGui\/releases\/download\/[\d.]+\/MediaInfoGui[\d.]+\.tar/,
+            "https://github.com/kanehekili/MediaInfoGui/releases/download/${version}/MediaInfoGui${version}.tar"
+        )
+        readme.text = text
+        println "  README.md synced to version ${version}"
+    }
+}
+
+// ── PyPI ──────────────────────────────────────────────────────────────────────
+/*does not make sense: external dependencies
 tasks.register("build_pypi") {
     description = "Stage dist/pypi/ ready for 'python -m build'"
     group       = "packaging"
+    dependsOn   "update_readme"
 
     doLast {
         def pypiOut = file("${outDir}/pypi")
@@ -121,13 +154,53 @@ tasks.register("build_pypi") {
             filter(ReplaceTokens, tokens: tok([xxx: version]))
         }
 
-        copy { from "README.md" into pypiOut }
+        // README for PyPI - relative image links have no repo context there
+        copy {
+            from "README.md"
+            into pypiOut
+            filter { line ->
+                line.replace(
+                    'https://github.com/kanehekili/MediaInfoGui/blob/master/',
+                    'https://raw.githubusercontent.com/kanehekili/MediaInfoGui/master/'
+                )
+            }
+        }
 
         println "  PyPI stage ready: ${pypiOut}"
         println "  Run:  cd ${pypiOut} && python -m build"
     }
 }
 
+tasks.register("upload_pypi") {
+    description = "Stage, build and upload the PyPI package (credentials from ~/.pypirc)"
+    group       = "packaging"
+    dependsOn   "build_pypi"
+
+    doLast {
+        def pypiOut = file("${outDir}/pypi")
+
+        // artifacts of previous versions would be uploaded too - twine takes dist/* as-is
+        delete file("${pypiOut}/dist")
+
+        // inheritIO() would write to the gradle daemon's streams, not the console
+        def run = { List<String> cmd ->
+            def proc = new ProcessBuilder(cmd).directory(pypiOut).redirectErrorStream(true).start()
+            proc.inputStream.eachLine { println "  $it" }
+            def rc = proc.waitFor()
+            if (rc != 0) throw new GradleException("${cmd.first()} failed with exit code ${rc}")
+        }
+
+        run(["python3", "-m", "build"])
+
+        // ProcessBuilder does not expand globs - pass the built files explicitly
+        def artifacts = fileTree("${pypiOut}/dist").files*.path.sort()
+        run(["twine", "check", "--strict"] + artifacts)
+        run(["twine", "upload"] + artifacts)
+
+        println "  Done: https://pypi.org/project/mediainfogui/${version}/"
+    }
+}
+*/
 // ── AUR ───────────────────────────────────────────────────────────────────────
 
 tasks.register("build_aur") {
@@ -148,6 +221,7 @@ tasks.register("build_aur") {
             into aurOut
         }
 
+        def archCfg = distros['arch']
         copy {
             from "build/AUR-template/PKGBUILD"
             into aurOut
@@ -155,28 +229,92 @@ tasks.register("build_aur") {
                 xxx      : version,
                 xpkgrelx : pkgrelease,
                 md5sum   : md5,
-                xlibsx   : archPkgFmt(libs),
-                xoptlibsx: archPkgFmt(optLibs),
+                xlibsx   : archPkgFmt(archCfg.libs),
+                xoptlibsx: archPkgFmt(archCfg.optLibs),
             ]))
         }
 
-        file("${aurOut}/.SRCINFO").text = makeSrcInfo(version, pkgrelease, md5, libs, optLibs)
+        file("${aurOut}/.SRCINFO").text =
+            makeSrcInfo(version, pkgrelease, md5, archCfg.libs, archCfg.optLibs)
         println "  .SRCINFO generated"
+    }
+}
+
+// ── DEB (one task per ubuntu distro) ─────────────────────────────────────────
+
+distros.findAll { _name, cfg -> cfg.type == "ubuntu" }.each { _name, cfg ->
+
+    tasks.register("build_${_name}") {
+        description = "Generate dist/DEB tarball for Ubuntu ${cfg.codename}"
+        group       = "packaging"
+
+        doLast {
+            def buildName = "mediainfogui_${version}+${pkgrelease}~${cfg.codename}"
+            def ubuStage  = stageDir(buildName)
+            def debOut    = file("${outDir}/DEB")
+            ubuStage.mkdirs()
+            debOut.mkdirs()
+
+            stageSources(file("${ubuStage}/src"))
+
+            // a single, toolkit-neutral entry - the app decides at runtime
+            // which UI to use (see detectToolkit in MediaInfoGui.py)
+            copy {
+                from "build/MediaInfoGui.desktop"
+                into "${ubuStage}/addons"
+            }
+
+            def timestamp = ZonedDateTime.now(ZoneOffset.UTC)
+                .format(DateTimeFormatter.ofPattern("EEE, d MMM yyyy HH:mm:ss", Locale.ENGLISH))
+
+            // copyright is copied unfiltered — @ in email addresses would be
+            // misinterpreted as ReplaceTokens delimiters
+            copy {
+                from "build/DEB-template/debian"
+                into "${ubuStage}/debian"
+                exclude "copyright"
+                filter(ReplaceTokens, tokens: tok([
+                    ubu       : cfg.codename,
+                    xxx       : version,
+                    xpkgrelx  : pkgrelease,
+                    xtsx      : timestamp,
+                    xlibsx    : cfg.libs,
+                    xsuggestsx: cfg.suggests,
+                ]))
+            }
+            copy {
+                from "build/DEB-template/debian/copyright"
+                into "${ubuStage}/debian"
+            }
+
+            def tarFile = file("${debOut}/${buildName}.tar")
+            makeTar(tarFile, buildName, ubuStage)
+            println "  → ${tarFile.name}"
+
+            delete ubuStage
+        }
     }
 }
 
 // ── aggregate / clean ─────────────────────────────────────────────────────────
 
-tasks.register("build_all") {
-    description = "Build install tarball, AUR package and PyPI package"
-    group       = "packaging"
-    dependsOn "build_tar", "build_aur", "build_pypi"
-}
-
 tasks.register("clean") {
     description = "Delete the dist/ output directory"
     group       = "build"
     doLast { delete outDir }
+}
+
+// "clean" wipes dist/ - so whenever it is part of the build, it runs first
+tasks.matching { t -> t.name.startsWith("build_") || t.name == "update_readme" }
+     .configureEach { mustRunAfter "clean" }
+
+tasks.register("build_all") {
+    description = "Build install tarball, AUR package, DEB x${distros.count { it.value.type == 'ubuntu' }}"
+    group       = "packaging"
+    dependsOn "clean"
+    dependsOn "update_readme", "build_tar", "build_aur"  //, "build_pypi"
+    dependsOn tasks.matching { t -> t.name.startsWith("build_ubu") }
+    doLast { delete file("${outDir}/stage") }
 }
 
 defaultTasks "build_all"

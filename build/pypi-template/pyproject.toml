@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mediainfogui"
+version = "@xxx@"
+description = "GUI for MediaInfo data - Qt6, GTK3 and GTK4"
+readme = "README.md"
+license = "GPL-2.0-or-later"
+requires-python = ">=3.9"
+dependencies = ["PyQt6"]
+
+[project.urls]
+Homepage = "https://github.com/kanehekili/MediaInfoGui"
+
+[project.scripts]
+mediainfogui = "mediainfogui.MediaInfoGui:main"
+
+[tool.setuptools.package-data]
+mediainfogui = [
+    "*.png",
+]

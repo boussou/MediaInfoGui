@@ -7,7 +7,7 @@ Created on May 01 2020
 import sys
 import os
 from PyQt6 import QtGui, QtWidgets, QtCore
-from PyQt6.QtWidgets import QApplication, QErrorMessage, QMainWindow, QSizePolicy
+from PyQt6.QtWidgets import QApplication, QMainWindow, QSizePolicy
 from PyQt6.QtGui import QFont
 from MediaInfoGui import isHeader, formatForClipboard
 
@@ -70,8 +70,8 @@ class MediaInfoView(QMainWindow):
         table.setHorizontalHeaderLabels(["Item","Data"])
         header = table.horizontalHeader()
         header.setSectionResizeMode(QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
+        header.setStretchLastSection(True)
         table.verticalHeader().setVisible(False)
-        table.verticalHeader().setStretchLastSection(True)
         table.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.NoSelection)
         table.setEditTriggers(QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers)
         table.setAlternatingRowColors(True)
@@ -105,13 +105,6 @@ class MediaInfoView(QMainWindow):
 
     def callback_btn_ok(self):
         QApplication.quit()
-
-
-def showMessage(messageString):
-    app = QtWidgets.QApplication([])
-    msg = QErrorMessage()
-    msg.showMessage(messageString)
-    app.exec()
 
 
 def main(argv = None):

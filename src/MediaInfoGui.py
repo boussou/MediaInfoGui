@@ -1,4 +1,5 @@
-# -*- coding: iso-8859-15 -*-
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 '''
 Created on Nov 25, 2011
 Vern�nftige GTK Oberfl�che f�r media info
@@ -124,37 +125,44 @@ def _insertAfterGeneral(lines, extraLines):
     return lines + [b""] + extraLines
 
 
+NO_FILE_TEXT = "- no file selected -"
+INVALID_FILE_TEXT = "- no media info available -"
+NO_TOOL_TEXT = "- mediainfo not installed -"
+
+
 def readMediaInfo(type,filename):
-    nameValid=False
+    lines = []
+    placeholder = NO_FILE_TEXT
     if len(filename)>3:
-        result=Popen(["mediainfo",filename],stdout=subprocess.PIPE).communicate()[0]
-        nameValid= len(result) > 10
+        placeholder = INVALID_FILE_TEXT
+        try:
+            result=Popen(["mediainfo",filename],stdout=subprocess.PIPE).communicate()[0]
+        except FileNotFoundError:
+            placeholder = NO_TOOL_TEXT
+            result = b""
+        if len(result) > 10:
+            lines = result.splitlines()
+            if _isMpegTS(lines):
+                tsLines = _getTSProgramLines(filename)
+                if tsLines:
+                    lines = _insertAfterGeneral(lines, tsLines)
 
-    if not nameValid:
-        if type == "gtk3":
-            import MediaInfoWidgetsGTK3
-            MediaInfoWidgetsGTK3.showMessage("Invalid File for Media Info")
-        elif type == "gtk4":
-            import MediaInfoWidgetsGTK4
-            MediaInfoWidgetsGTK4.showMessage("Invalid File for Media Info")
-        else:
-            import MediaInfoWidgetsQt
-            MediaInfoWidgetsQt.showMessage("Invalid File for Media Info")
-        return 0
-
-    lines = result.splitlines()
-    if _isMpegTS(lines):
-        tsLines = _getTSProgramLines(filename)
-        if tsLines:
-            lines = _insertAfterGeneral(lines, tsLines)
+    if not lines:
+        #no (usable) file given - show an empty list instead of an error dialog
+        lines = [placeholder.encode()]
 
     showListDialog(type,filename,lines)
 
 
+def windowTitle(fileName):
+    paths = [p for p in fileName.split("/") if p]
+    if not paths:
+        return "Media Info"
+    return "/".join(paths[-2:])
+
+
 def showListDialog(type,fileName,mediaInfoList):
-    paths = fileName.split("/")
-    pLen = len(paths)
-    item = paths[pLen-2]+"/"+paths[pLen-1]
+    item = windowTitle(fileName)
     rows = parseLines(mediaInfoList)
     if type == "gtk3":
         import MediaInfoWidgetsGTK3
@@ -167,16 +175,37 @@ def showListDialog(type,fileName,mediaInfoList):
         MediaInfoWidgetsQt.main([item,rows])
 
 
+def detectToolkit():
+    #No toolkit requested: take the first one that is actually installed.
+    #The order matches the alternative depends of the debian package
+    #(gir1.2-gtk-4.0 | gir1.2-gtk-3.0), so package and app agree.
+    import importlib.util
+    if importlib.util.find_spec("gi") is not None:
+        import gi
+        for ui,gtkVersion in (("gtk4","4.0"),("gtk3","3.0")):
+            try:
+                gi.require_version('Gtk', gtkVersion)
+                return ui
+            except ValueError:
+                pass
+    #nothing found either - let the Qt import raise a readable error
+    return "qt"
+
+
 def main(argv = None):
     filename=""
     type=""
     if argv is None:
         argv = sys.argv
-        if len(argv)>1:
-            type=argv[1]
-        if len(argv)>2:
-            filename=argv[2]
+        args=argv[1:]
+        #the toolkit is optional - a single argument is taken as the filename
+        if args and args[0] in ("qt","gtk3","gtk4"):
+            type=args.pop(0)
+        if args:
+            filename=args[0]
 
+    if type=="":
+        type=detectToolkit()
 
     print("Version:"+VERSION)
     readMediaInfo(type,filename)

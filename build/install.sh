@@ -6,7 +6,8 @@ fi
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
-read -p "Which flavour do you want? 1) Qt6  2) GTK3  3) GTK4 : " sel
+read -p "Which flavour do you want? 1) Qt6  2) GTK3  3) GTK4  4) auto (recommended) [4]: " sel
+sel=${sel:-4}
 
 if [ "$sel" = "1" ]; then
     cp "$DIR"/MediaInfoGuiQt.desktop   /usr/share/applications/MediaInfoGui.desktop
@@ -17,6 +18,11 @@ elif [ "$sel" = "2" ]; then
 elif [ "$sel" = "3" ]; then
     cp "$DIR"/MediaInfoGuiGTK4.desktop /usr/share/applications/MediaInfoGui.desktop
     prompt="python3-gi with GTK4"
+elif [ "$sel" = "4" ]; then
+    # no toolkit in the Exec line - MediaInfoGui.py picks GTK4, GTK3 or Qt6
+    # depending on what is installed
+    cp "$DIR"/MediaInfoGui.desktop     /usr/share/applications/MediaInfoGui.desktop
+    prompt="python3-gi (GTK3/GTK4) or python3-pyqt6 (Qt6)"
 else
     echo "Invalid choice. Aborting."
     exit 1
