@@ -216,11 +216,6 @@ tasks.register("build_aur") {
         def md5 = computeMD5(tarFile)
         println "  AUR source tarball: ${tarFile.name}  md5=${md5}"
 
-        copy {
-            from "build/AUR-template/mediainfogui.install"
-            into aurOut
-        }
-
         def archCfg = distros['arch']
         copy {
             from "build/AUR-template/PKGBUILD"
