@@ -160,7 +160,7 @@ def buildHighlightLines(lines):
             w = re.sub(r"[^0-9.]", "", width)
             h = re.sub(r"[^0-9.]", "", height)
             if w and h:
-                dimension = f"{w} x {h} pixels"
+                dimension = f"{w} x {h}"
     if dimension:
         entries.append(("Dimension", dimension))
 
